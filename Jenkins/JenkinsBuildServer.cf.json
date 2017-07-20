@@ -1,0 +1,268 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "",
+  "Metadata": {},
+  "Parameters": {
+    "Environment": {
+      "Type": "String",
+      "Default": "Prod",
+      "AllowedValues": [
+        "Prod",
+        "Demo",
+        "Sandbox",
+        "Test",
+        "DevOps"
+      ],
+      "Description": "Enter the Name for the 7mb environment."
+    },
+    "ServerInstanceType": {
+      "Type": "String",
+      "Default": "t2.micro",
+      "AllowedValues": [
+        "t2.micro",
+        "t2.medium",
+        "t2.large",
+        "m4.medium",
+        "m4.large",
+        "m4.xlarge"
+      ],
+      "Description": "Enter the Name for the 7mb environment."
+    },
+    "LoginKeyName": {
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "Description": "Enter the name of an existing key pair to use in this template."
+    }
+  },
+  "Mappings": {},
+  "Conditions": {},
+  "Resources": {
+    "MasterServerSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for the Rancher Instance layer.",
+        "VpcId": {
+          "Fn::ImportValue": {
+            "Fn::Sub": "${Environment}:VPC"
+          }
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "icmp",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "22",
+            "ToPort": "22",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "80",
+            "ToPort": "80",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "8080",
+            "ToPort": "8080",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "-1",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Deployment:Env",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${Environment}.SG.jenkins"
+            }
+          }
+        ]
+      }
+    },
+    "MasterServer": {
+      "Type": "AWS::EC2::Instance",
+      "Metadata": {
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "Install": [
+              "Setup",
+              "AptRepos",
+              "DockerJenkins",
+              "DockerCompose"
+            ]
+          },
+          "Setup": {
+            "packages": {
+              "apt": {
+                "apt-transport-https": [],
+                "ca-certificates": [],
+                "curl": [],
+                "software-properties-common": [],
+                "build-essential": [],
+                "openjdk-8-jre-headless": [],
+                "emacs": []
+              }
+            },
+            "commands": {
+              "a_download_node": {
+                "command": "wget https://nodejs.org/dist/v6.11.1/node-v6.11.1-linux-x64.tar.xz"
+              },
+              "b_extract_node": {
+                "command": "tar xf node-v6.11.1-linux-x64.tar.xz  --strip=1 -C /usr/local"
+              }
+            }
+          },
+          "AptRepos": {
+            "commands": {
+              "a_docker_GPG_key": {
+                "command": "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -"
+              },
+              "b_verify_docker_GPG_key": {
+                "command": "apt-key fingerprint 0EBFCD88"
+              },
+              "c_docker_repo": {
+                "command": "add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable'"
+              },
+              "d_jenkins_key": {
+                "command": "wget -q -O - https://pkg.jenkins.io/debian/jenkins.io.key | sudo apt-key add -"
+              },
+              "e_jenkins_deb": {
+                "command": "sh -c 'echo deb http://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'"
+              },
+              "f_apt_update" : {
+                "command": "apt-get update -y"
+              }
+            }
+          },
+          "DockerJenkins": {
+            "packages": {
+              "apt": {
+                "docker-ce": [],
+                "jenkins": [] 
+              }
+            }
+          },
+          "DockerCompose": {
+            "commands": {
+              "a_download_docker_compose": {
+                "command": "curl -L https://github.com/docker/compose/releases/download/1.14.0/docker-compose-`uname -s`-`uname -m` > /usr/local/bin/docker-compose"
+              },
+              "b_chmod_compose": {
+                "command": "chmod +x /usr/local/bin/docker-compose"
+              },
+              "c_usermod_jenkins": {
+                "command": "usermod -aG docker jenkins"
+              },
+              "d_usermod_ubuntu": {
+                "command": "usermod -aG docker ubuntu"
+              }
+            }
+          }
+        }
+      },
+      "Properties": {
+        "ImageId": "ami-d15a75c7",
+        "InstanceType": {
+          "Ref": "ServerInstanceType"
+        },
+        "KeyName": {
+          "Ref": "LoginKeyName"
+        },
+        "NetworkInterfaces": [
+          {
+            "AssociatePublicIpAddress": "true",
+            "DeviceIndex": "0",
+            "GroupSet": [
+              {
+                "Ref": "MasterServerSecurityGroup"
+              }
+            ],
+            "SubnetId": {
+              "Fn::Select": [
+                "0",
+                {
+                  "Fn::Split": [
+                    "|",
+                    {
+                      "Fn::ImportValue": {
+                        "Fn::Sub": "${Environment}:Subnets:Public"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash -ex\n",
+                "apt-get update\n",
+                "apt-get -y install python-setuptools\n",
+                "mkdir aws-cfn-bootstrap-latest\n",
+                "curl https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz | tar xz -C aws-cfn-bootstrap-latest --strip-components 1\n",
+                "easy_install aws-cfn-bootstrap-latest\n",
+                "/usr/local/bin/cfn-init ",
+                "          --verbose",
+                "          --stack ",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                "          --configsets Install ",
+                "          --resource MasterServer",
+                "          --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n",
+                "\n",
+                "/usr/local/bin/cfn-signal -e $? ",
+                "         --stack ",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                "         --resource MasterServer ",
+                "         --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n"
+              ]
+            ]
+          }
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "MasterNodeIP": {
+      "Description": "The public DNS of the master node",
+      "Value": {
+        "Fn::GetAtt": [
+          "MasterServer",
+          "PublicDnsName"
+        ]
+      },
+      "Export": {
+        "Name": "JenkinsMasterDNS"
+      }
+    }
+  }
+}

@@ -53,7 +53,7 @@
         }
     },
     "Parameters": {
-        "7mbEnv": {
+        "Environment": {
             "Type": "String",
             "Default": "Prod",
             "AllowedValues": [
@@ -66,17 +66,17 @@
         "VPCMultiAZ": {
             "Type": "AWS::EC2::VPC",
             "Properties": {
-                "CidrBlock": { "Fn::FindInMap": ["EnvSettings", { "Ref": "7mbEnv" }, "VPC"] },
+                "CidrBlock": { "Fn::FindInMap": ["EnvSettings", { "Ref": "Environment" }, "VPC"] },
                 "EnableDnsSupport": true,
                 "EnableDnsHostnames": true,
                 "InstanceTenancy": "default",
                 "Tags": [{
                         "Key": "7mb:Env",
-                        "Value": { "Ref": "7mbEnv" }
+                        "Value": { "Ref": "Environment" }
                     },
                     {
                         "Key": "Name",
-                        "Value": { "Fn::Sub": "${7mbEnv}.VPC" }
+                        "Value": { "Fn::Sub": "${Environment}.VPC" }
                     }
                 ]
             }
@@ -85,15 +85,15 @@
             "Type": "AWS::EC2::Subnet",
             "Properties": {
                 "AvailabilityZone": { "Fn::Select": ["0", { "Fn::GetAZs": { "Ref": "AWS::Region" } }] },
-                "CidrBlock": { "Fn::FindInMap": ["EnvSettings", { "Ref": "7mbEnv" }, "Zone1Public"] },
+                "CidrBlock": { "Fn::FindInMap": ["EnvSettings", { "Ref": "Environment" }, "Zone1Public"] },
                 "MapPublicIpOnLaunch": false,
                 "Tags": [{
                         "Key": "7mb:Env",
-                        "Value": { "Ref": "7mbEnv" }
+                        "Value": { "Ref": "Environment" }
                     },
                     {
                         "Key": "Name",
-                        "Value": { "Fn::Sub": "${7mbEnv}.Zone1.Public" }
+                        "Value": { "Fn::Sub": "${Environment}.Zone1.Public" }
                     }
                 ],
                 "VpcId": { "Ref": "VPCMultiAZ" }
@@ -103,15 +103,15 @@
             "Type": "AWS::EC2::Subnet",
             "Properties": {
                 "AvailabilityZone": { "Fn::Select": ["1", { "Fn::GetAZs": { "Ref": "AWS::Region" } }] },
-                "CidrBlock": { "Fn::FindInMap": ["EnvSettings", { "Ref": "7mbEnv" }, "Zone2Public"] },
+                "CidrBlock": { "Fn::FindInMap": ["EnvSettings", { "Ref": "Environment" }, "Zone2Public"] },
                 "MapPublicIpOnLaunch": false,
                 "Tags": [{
                         "Key": "7mb:Env",
-                        "Value": { "Ref": "7mbEnv" }
+                        "Value": { "Ref": "Environment" }
                     },
                     {
                         "Key": "Name",
-                        "Value": { "Fn::Sub": "${7mbEnv}.Zone2.Public" }
+                        "Value": { "Fn::Sub": "${Environment}.Zone2.Public" }
                     }
                 ],
                 "VpcId": { "Ref": "VPCMultiAZ" }
@@ -121,15 +121,15 @@
             "Type": "AWS::EC2::Subnet",
             "Properties": {
                 "AvailabilityZone": { "Fn::Select": ["2", { "Fn::GetAZs": { "Ref": "AWS::Region" } }] },
-                "CidrBlock": { "Fn::FindInMap": ["EnvSettings", { "Ref": "7mbEnv" }, "Zone3Public"] },
+                "CidrBlock": { "Fn::FindInMap": ["EnvSettings", { "Ref": "Environment" }, "Zone3Public"] },
                 "MapPublicIpOnLaunch": false,
                 "Tags": [{
                         "Key": "7mb:Env",
-                        "Value": { "Ref": "7mbEnv" }
+                        "Value": { "Ref": "Environment" }
                     },
                     {
                         "Key": "Name",
-                        "Value": { "Fn::Sub": "${7mbEnv}.Zone3.Public" }
+                        "Value": { "Fn::Sub": "${Environment}.Zone3.Public" }
                     }
                 ],
                 "VpcId": { "Ref": "VPCMultiAZ" }
@@ -139,15 +139,15 @@
             "Type": "AWS::EC2::Subnet",
             "Properties": {
                 "AvailabilityZone": { "Fn::Select": ["2", { "Fn::GetAZs": { "Ref": "AWS::Region" } }] },
-                "CidrBlock": { "Fn::FindInMap": ["EnvSettings", { "Ref": "7mbEnv" }, "Zone4Public"] },
+                "CidrBlock": { "Fn::FindInMap": ["EnvSettings", { "Ref": "Environment" }, "Zone4Public"] },
                 "MapPublicIpOnLaunch": false,
                 "Tags": [{
                         "Key": "7mb:Env",
-                        "Value": { "Ref": "7mbEnv" }
+                        "Value": { "Ref": "Environment" }
                     },
                     {
                         "Key": "Name",
-                        "Value": { "Fn::Sub": "${7mbEnv}.Zone4.Public" }
+                        "Value": { "Fn::Sub": "${Environment}.Zone4.Public" }
                     }
                 ],
                 "VpcId": { "Ref": "VPCMultiAZ" }
@@ -159,11 +159,11 @@
                 "VpcId": { "Ref": "VPCMultiAZ" },
                 "Tags": [{
                         "Key": "7mb:Env",
-                        "Value": { "Ref": "7mbEnv" }
+                        "Value": { "Ref": "Environment" }
                     },
                     {
                         "Key": "Name",
-                        "Value": { "Fn::Sub": "${7mbEnv}.Public.RouteTable" }
+                        "Value": { "Fn::Sub": "${Environment}.Public.RouteTable" }
                     }
                 ]
             },
@@ -210,11 +210,11 @@
             "Properties": {
                 "Tags": [{
                         "Key": "7mb:Env",
-                        "Value": { "Ref": "7mbEnv" }
+                        "Value": { "Ref": "Environment" }
                     },
                     {
                         "Key": "Name",
-                        "Value": { "Fn::Sub": "${7mbEnv}.InternetGateway" }
+                        "Value": { "Fn::Sub": "${Environment}.InternetGateway" }
                     }
                 ]
             }
@@ -230,20 +230,20 @@
             "Type": "AWS::Route53::HostedZone",
             "Properties": {
                 "HostedZoneConfig": {
-                    "Comment": { "Fn::Sub": "The private hosted zone for the ${7mbEnv} environment." }
+                    "Comment": { "Fn::Sub": "The private hosted zone for the ${Environment} environment." }
                 },
-                "Name": { "Fn::FindInMap": ["EnvSettings", { "Ref": "7mbEnv" }, "HostedZone"] },
+                "Name": { "Fn::FindInMap": ["EnvSettings", { "Ref": "Environment" }, "HostedZone"] },
                 "VPCs": [{
                     "VPCId": { "Ref": "VPCMultiAZ" },
                     "VPCRegion": { "Ref": "AWS::Region" }
                 }],
                 "HostedZoneTags": [{
                         "Key": "7mb:Env",
-                        "Value": { "Ref": "7mbEnv" }
+                        "Value": { "Ref": "Environment" }
                     },
                     {
                         "Key": "Name",
-                        "Value": { "Fn::Sub": "${7mbEnv}.PrivateHostedZone" }
+                        "Value": { "Fn::Sub": "${Environment}.PrivateHostedZone" }
                     }
                 ]
             }
@@ -261,11 +261,11 @@
                 }],
                 "Tags": [{
                         "Key": "7mb:Env",
-                        "Value": { "Ref": "7mbEnv" }
+                        "Value": { "Ref": "Environment" }
                     },
                     {
                         "Key": "Name",
-                        "Value": { "Fn::Sub": "${7mbEnv}.WebServerSG" }
+                        "Value": { "Fn::Sub": "${Environment}.WebServerSG" }
                     }
                 ],
                 "VpcId": { "Ref": "VPCMultiAZ" }
@@ -284,11 +284,11 @@
                 }],
                 "Tags": [{
                         "Key": "7mb:Env",
-                        "Value": { "Ref": "7mbEnv" }
+                        "Value": { "Ref": "Environment" }
                     },
                     {
                         "Key": "Name",
-                        "Value": { "Fn::Sub": "${7mbEnv}.SSHSG" }
+                        "Value": { "Fn::Sub": "${Environment}.SSHSG" }
                     }
                 ],
                 "VpcId": { "Ref": "VPCMultiAZ" }
@@ -300,21 +300,21 @@
             "Description": "The VPC ID associated with the environment.",
             "Value": { "Ref": "VPCMultiAZ" },
             "Export": {
-                "Name": { "Fn::Sub": "${7mbEnv}:VPC" }
+                "Name": { "Fn::Sub": "${Environment}:VPC" }
             }
         },
         "EnvVPCType": {
             "Description": "Whether or not the VPC is setup as single availability zone or multiple.",
             "Value": "MultiAZ",
             "Export": {
-                "Name": { "Fn::Sub": "${7mbEnv}:VPC:Type" }
+                "Name": { "Fn::Sub": "${Environment}:VPC:Type" }
             }
         },
         "EnvRegion": {
             "Description": "The AWS Region used with the environment.",
             "Value": { "Ref": "AWS::Region" },
             "Export": {
-                "Name": { "Fn::Sub": "${7mbEnv}:Region" }
+                "Name": { "Fn::Sub": "${Environment}:Region" }
             }
         },
         "EnvVPCZones": {
@@ -326,14 +326,14 @@
                 ]]
             },
             "Export": {
-                "Name": { "Fn::Sub": "${7mbEnv}:Zones" }
+                "Name": { "Fn::Sub": "${Environment}:Zones" }
             }
         },
         "EnvVPCDefaultZone": {
             "Description": "The default Availability Zone used for the environment.",
             "Value": { "Fn::Select": ["0", { "Fn::GetAZs": { "Ref": "AWS::Region" } }] },
             "Export": {
-                "Name": { "Fn::Sub": "${7mbEnv}:Zones:Default" }
+                "Name": { "Fn::Sub": "${Environment}:Zones:Default" }
             }
         },
         "EnvVPCSubnets": {
@@ -345,7 +345,7 @@
                 ]]
             },
             "Export": {
-                "Name": { "Fn::Sub": "${7mbEnv}:Subnets" }
+                "Name": { "Fn::Sub": "${Environment}:Subnets" }
             }
         },
         "EnvVPCPublicSubnets": {
@@ -357,7 +357,7 @@
                 ]]
             },
             "Export": {
-                "Name": { "Fn::Sub": "${7mbEnv}:Subnets:Public" }
+                "Name": { "Fn::Sub": "${Environment}:Subnets:Public" }
             }
         },
         "EnvVPCRouteTables": {
@@ -368,35 +368,35 @@
                 ]]
             },
             "Export": {
-                "Name": { "Fn::Sub": "${7mbEnv}:RouteTables" }
+                "Name": { "Fn::Sub": "${Environment}:RouteTables" }
             }
         },
         "EnvVPCCidr": {
             "Description": "The CIDR used for the VPC in the environment.",
-            "Value": { "Fn::FindInMap": ["EnvSettings", { "Ref": "7mbEnv" }, "VPC"] },
+            "Value": { "Fn::FindInMap": ["EnvSettings", { "Ref": "Environment" }, "VPC"] },
             "Export": {
-                "Name": { "Fn::Sub": "${7mbEnv}:VPC:Cidr" }
+                "Name": { "Fn::Sub": "${Environment}:VPC:Cidr" }
             }
         },
         "EnvVPCBaseCidr": {
             "Description": "The first two CIDR sections used for the environment.",
-            "Value": { "Fn::FindInMap": ["EnvSettings", { "Ref": "7mbEnv" }, "Base"] },
+            "Value": { "Fn::FindInMap": ["EnvSettings", { "Ref": "Environment" }, "Base"] },
             "Export": {
-                "Name": { "Fn::Sub": "${7mbEnv}:VPC:BaseCidr" }
+                "Name": { "Fn::Sub": "${Environment}:VPC:BaseCidr" }
             }
         },
         "EnvPrivateHostedZoneId": {
             "Description": "The id of the private hosted zone used for the environment.",
             "Value": { "Ref": "VPCPrivateHostedZone" },
             "Export": {
-                "Name": { "Fn::Sub": "${7mbEnv}:PrivateHostedZone" }
+                "Name": { "Fn::Sub": "${Environment}:PrivateHostedZone" }
             }
         },
         "EnvPrivateHostedZoneName": {
             "Description": "The name of the private hosted zone used for the environment.",
-            "Value": { "Fn::FindInMap": ["EnvSettings", { "Ref": "7mbEnv" }, "HostedZone"] },
+            "Value": { "Fn::FindInMap": ["EnvSettings", { "Ref": "Environment" }, "HostedZone"] },
             "Export": {
-                "Name": { "Fn::Sub": "${7mbEnv}:PrivateHostedZone:Name" }
+                "Name": { "Fn::Sub": "${Environment}:PrivateHostedZone:Name" }
             }
         }
     }
