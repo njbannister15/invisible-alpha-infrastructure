@@ -22,7 +22,6 @@
         "t2.micro",
         "t2.medium",
         "t2.large",
-        "m4.medium",
         "m4.large",
         "m4.xlarge"
       ],
@@ -31,6 +30,10 @@
     "LoginKeyName": {
       "Type": "AWS::EC2::KeyPair::KeyName",
       "Description": "Enter the name of an existing key pair to use in this template."
+    },
+    "HostedZone": {
+      "Type": "String",
+      "Description": "HostedZone for jenkins (include trailing . (dot))"
     }
   },
   "Mappings": {},
@@ -79,7 +82,7 @@
         ],
         "Tags": [
           {
-            "Key": "Deployment:Env",
+            "Key": "Environment",
             "Value": {
               "Ref": "Environment"
             }
@@ -93,6 +96,41 @@
         ]
       }
     },
+    "JenkinsInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "JenkinsRole"
+          }
+        ]
+      }
+    },
+    "JenkinsRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+        ]
+      }
+    },
     "MasterServer": {
       "Type": "AWS::EC2::Instance",
       "Metadata": {
@@ -102,7 +140,10 @@
               "Setup",
               "AptRepos",
               "DockerJenkins",
-              "DockerCompose"
+              "DockerCompose",
+              "InstallGo",
+              "InstallDockerCredHelper",
+              "Reboot"
             ]
           },
           "Setup": {
@@ -114,7 +155,10 @@
                 "software-properties-common": [],
                 "build-essential": [],
                 "openjdk-8-jre-headless": [],
-                "emacs": []
+                "emacs": [],
+                "authbind": [],
+                "python-pip": [],
+                "git-all": []
               }
             },
             "commands": {
@@ -123,6 +167,18 @@
               },
               "b_extract_node": {
                 "command": "tar xf node-v6.11.1-linux-x64.tar.xz  --strip=1 -C /usr/local"
+              },
+              "c_authbind_touch": {
+                "command": "touch /etc/authbind/byport/80"
+              },
+              "d_authbind_chmod": {
+                "command": "chmod 500 /etc/authbind/byport/80"
+              },
+              "e_install_pip": {
+                "command": "pip install --upgrade pip"
+              },
+              "f_install_aws_cli": {
+                "command": "pip install --upgrade awscli"
               }
             }
           },
@@ -143,7 +199,7 @@
               "e_jenkins_deb": {
                 "command": "sh -c 'echo deb http://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'"
               },
-              "f_apt_update" : {
+              "f_apt_update": {
                 "command": "apt-get update -y"
               }
             }
@@ -151,8 +207,44 @@
           "DockerJenkins": {
             "packages": {
               "apt": {
-                "docker-ce": [],
-                "jenkins": [] 
+                "docker-ce": [
+                  "17.06.0~ce-0~ubuntu"
+                ],
+                "jenkins": [
+                  "2.60.2"
+                ]
+              }
+            },
+            "commands": {
+              "a_stop_jenkins": {
+                "command": "systemctl stop jenkins"
+              },
+              "b_usermod_jenkins": {
+                "command": "usermod -aG docker,jenkins,ubuntu jenkins"
+              },
+              "c_usermod_ubuntu": {
+                "command": "usermod -aG docker,jenkins,ubuntu ubuntu"
+              },
+              "d_authbind_chown": {
+                "command": "chown jenkins /etc/authbind/byport/80"
+              },
+              "e_make_jenkins_home": {
+                "command": "mkdir /home/jenkins"
+              },
+              "g_mode_jenkins_home": {
+                "command": "usermod -d /home/jenkins jenkins"
+              },
+              "h_customize_jenkins_home": {
+                "command": "cp /home/ubuntu/.bashrc /home/jenkins/.bashrc"
+              },
+              "j_update_conf": {
+                "command": "sed -i.bak 's/HTTP_PORT=8080/HTTP_PORT=80/g' /etc/default/jenkins"
+              },
+              "k_authbind": {
+                "command": "sed -i.bak 's:\\$JAVA:authbind \\$JAVA:' /etc/init.d/jenkins"
+              },
+              "l_daemon_reload_restart": {
+                "command": "systemctl daemon-reload && systemctl start jenkins "
               }
             }
           },
@@ -163,12 +255,83 @@
               },
               "b_chmod_compose": {
                 "command": "chmod +x /usr/local/bin/docker-compose"
+              }
+            }
+          },
+          "InstallGo": {
+            "commands": {
+              "a_download_go": {
+                "command": "curl -O https://storage.googleapis.com/golang/go1.8.3.linux-amd64.tar.gz"
               },
-              "c_usermod_jenkins": {
-                "command": "usermod -aG docker jenkins"
+              "b_untar_go": {
+                "command": "tar xvf go1.8.3.linux-amd64.tar.gz"
               },
-              "d_usermod_ubuntu": {
-                "command": "usermod -aG docker ubuntu"
+              "c_chown_go": {
+                "command": "chown -R root:root ./go"
+              },
+              "d_move_go": {
+                "command": "mv go /usr/local"
+              },
+              "e_make_go_home": {
+                "command": "mkdir -p /home/jenkins/go/work"
+              },
+              "f_make_go_home_ubuntu": {
+                "command": "mkdir -p /home/ubuntu/go/work"
+              },
+              "g_set_default_environment_path": {
+                "command": "echo \"export PATH=\\$PATH:/usr/local/go/bin\" >> /home/jenkins/.bashrc"
+              },
+              "h_set_default_environment_gopath": {
+                "command": "echo \"export GOPATH=/home/jenkins/go/work\" >> /home/jenkins/.bashrc"
+              },
+              "i_set_default_environment_path_ubuntu": {
+                "command": "echo \"export PATH=\\$PATH:/usr/local/go/bin\" >> /home/ubuntu/.bashrc"
+              },
+              "j_set_default_environment_ubuntu": {
+                "command": "echo \"export GOPATH=/home/ubuntu/go/work\" >> /home/ubuntu/.bashrc"
+              }
+            }
+          },
+          "InstallDockerCredHelper": {
+            "files": {
+              "/home/jenkins/.docker/config.json": {
+                "content": "{ \"credsStore\": \"ecr-login\" }",
+                "mode": "000775",
+                "owner": "jenkins",
+                "group": "jenkins"
+              }
+            },
+            "commands": {
+              "a_make_cred_helper_home": {
+                "command": "mkdir -p /home/jenkins/go/work/src/github.com/awslabs/amazon-ecr-credential-helper"
+              },
+              "b_download_cred_helper": {
+                "command": "git clone https://github.com/awslabs/amazon-ecr-credential-helper.git .",
+                "cwd": "/home/jenkins/go/work/src/github.com/awslabs/amazon-ecr-credential-helper"
+              },
+              "c_make_cred_helper": {
+                "command": "make",
+                "cwd": "/home/jenkins/go/work/src/github.com/awslabs/amazon-ecr-credential-helper",
+                "env": {
+                  "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/local/go/bin",
+                  "GOPATH": "/home/jenkins/go/work"
+                }
+              },
+              "e_set_helper_bin": {
+                "command": "cp /home/jenkins/go/work/src/github.com/awslabs/amazon-ecr-credential-helper/bin/local/docker-credential-ecr-login /usr/local/bin/."
+              },
+              "f_build_environment": {
+                "command": "rm -rf /home/jenkins/go/work/src"
+              },
+              "g_chown_jenkins_home": {
+                "command": "chown -R jenkins:jenkins /home/jenkins"
+              }
+            }
+          },
+          "Reboot": {
+            "commands": {
+              "reboot": {
+                "command": "reboot"
               }
             }
           }
@@ -206,6 +369,21 @@
                 }
               ]
             }
+          }
+        ],
+        "IamInstanceProfile": {
+          "Ref": "JenkinsInstanceProfile"
+        },
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": "Jenkins Master"
           }
         ],
         "UserData": {
@@ -248,6 +426,36 @@
             ]
           }
         }
+      }
+    },
+    "MasterServerRecordSet": {
+      "Type": "AWS::Route53::RecordSet",
+      "Properties": {
+        "HostedZoneName": {
+          "Ref": "HostedZone"
+        },
+        "Comment": "DNS name for my instance.",
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "jenkins.",
+              {
+                "Ref": "HostedZone"
+              }
+            ]
+          ]
+        },
+        "Type": "A",
+        "TTL": "900",
+        "ResourceRecords": [
+          {
+            "Fn::GetAtt": [
+              "MasterServer",
+              "PublicIp"
+            ]
+          }
+        ]
       }
     }
   },
