@@ -15,6 +15,26 @@
       ],
       "Description": "Enter the Name for the 7mb environment."
     },
+    "EnvironmentName": {
+      "Type": "String",
+      "Default": "Prod",
+      "AllowedValues": [
+        "Prod",
+        "Demo",
+        "Sandbox",
+        "Test",
+        "DevOps"
+      ],
+      "Description": "Enter the Name for this environment, it is used in tags... etc"
+    },
+    "VPCId" :{
+      "Type" : "AWS::EC2::VPC::Id",
+      "Description": "The VPC To deploy into"
+    },
+    "SubnetId" :{
+      "Type" : "AWS::EC2::Subnet::Id",
+      "Description": "The Subnet of the vpc to To deploy into"
+    },
     "ServerInstanceType": {
       "Type": "String",
       "Default": "t2.micro",
@@ -179,6 +199,9 @@
               },
               "f_install_aws_cli": {
                 "command": "pip install --upgrade awscli"
+              },
+              "g_uninstall_aws_cli": {
+                "command": "apt-get remove --purge apache2"
               }
             }
           },
