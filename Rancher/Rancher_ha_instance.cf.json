@@ -1,0 +1,416 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Sets up a Rancher Server inside a VPC in HA mode",
+  "Mappings": {
+    "AWSInstanceType2Arch": {
+      "t2.nano": {
+        "Arch": "HVM64"
+      },
+      "t2.micro": {
+        "Arch": "HVM64"
+      },
+      "t2.small": {
+        "Arch": "HVM64"
+      },
+      "t2.medium": {
+        "Arch": "HVM64"
+      },
+      "m3.medium": {
+        "Arch": "HVM64"
+      },
+      "m3.large": {
+        "Arch": "HVM64"
+      },
+      "m3.xlarge": {
+        "Arch": "HVM64"
+      },
+      "m3.2xlarge": {
+        "Arch": "HVM64"
+      },
+      "m4.large": {
+        "Arch": "HVM64"
+      }
+    },
+    "AWSRegionArch2AMI": {
+      "ap-northeast-1": {
+        "HVM64": "ami-afb09dc8"
+      },
+      "ap-northeast-2": {
+        "HVM64": "ami-66e33108"
+      },
+      "ap-south-1": {
+        "HVM64": "ami-c2ee9dad"
+      },
+      "ap-southeast-1": {
+        "HVM64": "ami-8fcc75ec"
+      },
+      "ap-southeast-2": {
+        "HVM64": "ami-96666ff5"
+      },
+      "ca-central-1": {
+        "HVM64": "ami-b3d965d7"
+      },
+      "cn-north-1": {
+        "HVM64": "ami-a163b4cc"
+      },
+      "eu-central-1": {
+        "HVM64": "ami-060cde69"
+      },
+      "eu-west-1": {
+        "HVM64": "ami-a8d2d7ce"
+      },
+      "eu-west-2": {
+        "HVM64": "ami-f1d7c395"
+      },
+      "sa-east-1": {
+        "HVM64": "ami-4090f22c"
+      },
+      "us-east-1": {
+        "HVM64": "ami-80861296"
+      },
+      "us-east-2": {
+        "HVM64": "ami-618fab04"
+      },
+      "us-gov-west-1": {
+        "HVM64": "ami-ff22a79e"
+      },
+      "us-west-1": {
+        "HVM64": "ami-2afbde4a"
+      },
+      "us-west-2": {
+        "HVM64": "ami-efd0428f"
+      }
+    }
+  },
+  "Parameters": {
+    "EnvironmentTag": {
+      "Type": "String",
+      "Default": "Production",
+      "MinLength": "3",
+      "MaxLength": "12",
+      "AllowedPattern": "^[a-zA-Z]+$",
+      "Description": "Enter the Name for the environment, this is used in tagging"
+    },
+    "RancherKeyName": {
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "Description": "Enter the name of an existing key pair to use for SSH into instances"
+    },
+    "VPCId": {
+      "Type": "AWS::EC2::VPC::Id",
+      "Description": "The VPC To deploy into"
+    },
+    "PrivateHostedZone": {
+      "Type": "AWS::Route53::HostedZone::Id",
+      "Description": "The id of the hosted zone that we will put rancher into (this is usually a private hosted zone)"
+    },
+    "PrivateHostedZoneName": {
+      "Type": "String",
+      "Description": "The name of the hoseted zone for rancher (see PrivateHostedZone (do not add a trailing \".\")"
+    },
+    "RancherHostSubnetID": {
+      "Type": "AWS::EC2::Subnet::Id",
+      "Description": "The subnet you want to put the rancher server in."
+    },
+    "RancherAvailabilityZone": {
+      "Type": "AWS::EC2::AvailabilityZone::Name",
+      "Description": "The availaibility zone for the ranche instance"
+    },
+    "RancherInstanceType": {
+      "Type": "String",
+      "Default": "t2.micro",
+      "AllowedValues": [
+        "t2.nano",
+        "t2.micro",
+        "t2.small",
+        "m3.medium",
+        "m4.large"
+      ],
+      "Description": "Enter a size for the rancher instances in the VPC from t2.nano, t2.micro, t2.small, m3.medium, or m4.large. Default is t2.micro."
+    },
+    "RancherInstanceHostname": {
+      "Type": "String",
+      "Default": "rancher",
+      "Description": "Enter a hostname for the rancher instance created by this template."
+    },
+    "RancherInstancePort": {
+      "Type": "String",
+      "Default": "8080",
+      "Description": "Enter a port for the rancher instance created by this template."
+    },
+    "RancherDBHostname": {
+      "Type": "String",
+      "Default": "rancher-db",
+      "Description": "Enter a hostname for the database created by this template."
+    },
+    "RancherDBPort": {
+      "Type": "String",
+      "Default": "3306",
+      "Description": "Enter a port for the database created by this template."
+    },
+    "RancherDBName": {
+      "Type": "String",
+      "MaxLength": "255",
+      "MinLength": "1",
+      "ConstraintDescription": "must begin with a letter and contain only alphanumeric characters.",
+      "Default": "cattle",
+      "Description": "Enter a database name for the DB created by this template."
+    },
+    "RancherDBUser": {
+      "Type": "String",
+      "MaxLength": "255",
+      "MinLength": "1",
+      "ConstraintDescription": "must begin with a letter and contain only alphanumeric characters.",
+      "Default": "cattle",
+      "Description": "Enter a name for the database user created by this template."
+    },
+    "RancherDBPassword": {
+      "Type": "String",
+      "NoEcho": "true",
+      "MaxLength": "255",
+      "MinLength": "4",
+      "ConstraintDescription": "must contain atleast 4 characters.",
+      "Description": "Enter a password for the database user created by this template."
+    }
+  },
+  "Resources": {
+    "RancherInstance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "AvailabilityZone": {
+          "Ref": "RancherAvailabilityZone"
+        },
+        "ImageId": {
+          "Fn::FindInMap": [
+            "AWSRegionArch2AMI",
+            {
+              "Ref": "AWS::Region"
+            },
+            {
+              "Fn::FindInMap": [
+                "AWSInstanceType2Arch",
+                {
+                  "Ref": "RancherInstanceType"
+                },
+                "Arch"
+              ]
+            }
+          ]
+        },
+        "InstanceInitiatedShutdownBehavior": "stop",
+        "InstanceType": {
+          "Ref": "RancherInstanceType"
+        },
+        "KeyName": {
+          "Ref": "RancherKeyName"
+        },
+        "SourceDestCheck": "false",
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "EnvironmentTag"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                ".",
+                [
+                  {
+                    "Fn::Sub": "${EnvironmentTag}.Rancher"
+                  },
+                  {
+                    "Ref": "AWS::StackName"
+                  }
+                ]
+              ]
+            }
+          }
+        ],
+        "Tenancy": "default",
+        "NetworkInterfaces": [
+          {
+            "AssociatePublicIpAddress": true,
+            "DeleteOnTermination": true,
+            "DeviceIndex": "0",
+            "GroupSet": [
+              {
+                "Ref": "RancherInstanceSecurityGroup"
+              }
+            ],
+            "SubnetId": {
+              "Ref": "RancherHostSubnetID"
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash -v\n",
+                "set -e -x\n",
+                "export DEBIAN_FRONTEND=noninteractive\n",
+                "apt-get -y update && apt-get -y upgrade\n",
+                "apt-get -y install \\\n",
+                "   apt-transport-https \\\n",
+                "   ca-certificates \\\n",
+                "   curl \\\n",
+                "   software-properties-common\n",
+                "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -\n",
+                "add-apt-repository \"deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable\"\n",
+                "apt-get -y update\n",
+                "apt-get -y install docker-ce\n",
+                "wget http://s3.amazonaws.com/ec2metadata/ec2-metadata\n",
+                "chmod u+x ec2-metadata\n",
+                {
+                  "Fn::Sub": "docker run -d --restart=unless-stopped --name rancher -p 9345:9345 -p ${RancherInstancePort}:8080 rancher/server"
+                },
+                {
+                  "Fn::Sub": " --db-host ${RancherDBHostname}"
+                },
+                ".",
+                {
+                  "Ref": "PrivateHostedZoneName"
+                },
+                {
+                  "Fn::Sub": " --db-port ${RancherDBPort}"
+                },
+                {
+                  "Fn::Sub": " --db-user ${RancherDBUser}"
+                },
+                {
+                  "Fn::Sub": " --db-pass \"${RancherDBPassword}\""
+                },
+                {
+                  "Fn::Sub": " --db-name ${RancherDBName}"
+                },
+                " --advertise-address `./ec2-metadata --local-ipv4 | cut -d ' ' -f 2`",
+                "\n"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "RancherInstanceSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for the Rancher Instance layer.",
+        "VpcId": {
+          "Ref": "VPCId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "icmp",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "22",
+            "ToPort": "22",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "80",
+            "ToPort": "80",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "8080",
+            "ToPort": "8080",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "443",
+            "ToPort": "443",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "8443",
+            "ToPort": "8443",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "9345",
+            "ToPort": "9345",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "-1",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "EnvironmentTag"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${EnvironmentTag}.SG.Rancher"
+            }
+          }
+        ]
+      }
+    },
+    "RancherInstanceRecordSet": {
+      "Type": "AWS::Route53::RecordSet",
+      "Properties": {
+        "HostedZoneId": {
+          "Ref": "PrivateHostedZone"
+        },
+        "Comment": "The private DNS record for the rancher instance.",
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::StackName"
+              },
+              ".",
+              {
+                "Ref": "PrivateHostedZoneName"
+              },
+              "."
+            ]
+          ]
+        },
+        "Type": "A",
+        "TTL": "900",
+        "ResourceRecords": [
+          {
+            "Fn::GetAtt": [
+              "RancherInstance",
+              "PrivateIp"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "DNSNAME": {
+      "Description": "The Public dns name",
+      "Value": {
+        "Fn::GetAtt": [
+          "RancherInstance",
+          "PublicDnsName"
+        ]
+      }
+    }
+  }
+}

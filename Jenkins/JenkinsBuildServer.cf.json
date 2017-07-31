@@ -3,37 +3,30 @@
   "Description": "",
   "Metadata": {},
   "Parameters": {
-    "Environment": {
+    "EnvironmentTag": {
       "Type": "String",
-      "Default": "Prod",
+      "Default": "Production",
       "AllowedValues": [
-        "Prod",
+        "Production",
+        "Development",
         "Demo",
         "Sandbox",
-        "Test",
-        "DevOps"
-      ],
-      "Description": "Enter the Name for the 7mb environment."
-    },
-    "EnvironmentName": {
-      "Type": "String",
-      "Default": "Prod",
-      "AllowedValues": [
-        "Prod",
-        "Demo",
-        "Sandbox",
-        "Test",
+        "Testing",
         "DevOps"
       ],
       "Description": "Enter the Name for this environment, it is used in tags... etc"
     },
-    "VPCId" :{
-      "Type" : "AWS::EC2::VPC::Id",
+    "VPCId": {
+      "Type": "AWS::EC2::VPC::Id",
       "Description": "The VPC To deploy into"
     },
-    "SubnetId" :{
-      "Type" : "AWS::EC2::Subnet::Id",
+    "SubnetId": {
+      "Type": "AWS::EC2::Subnet::Id",
       "Description": "The Subnet of the vpc to To deploy into"
+    },
+    "JenkinsHomeVolume": {
+      "Type": "AWS::EC2::Volume::Id",
+      "Description": "Volume Where Jenkins home will live, after this is attached, you need to ssh into the machine and mount it."
     },
     "ServerInstanceType": {
       "Type": "String",
@@ -53,6 +46,7 @@
     },
     "HostedZone": {
       "Type": "String",
+      "Default": "dashboardalpha.com.",
       "Description": "HostedZone for jenkins (include trailing . (dot))"
     }
   },
@@ -64,9 +58,7 @@
       "Properties": {
         "GroupDescription": "Security group for the Rancher Instance layer.",
         "VpcId": {
-          "Fn::ImportValue": {
-            "Fn::Sub": "${Environment}:VPC"
-          }
+          "Ref": "VPCId"
         },
         "SecurityGroupIngress": [
           {
@@ -89,8 +81,20 @@
           },
           {
             "IpProtocol": "tcp",
+            "FromPort": "443",
+            "ToPort": "443",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
             "FromPort": "8080",
             "ToPort": "8080",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "8443",
+            "ToPort": "8443",
             "CidrIp": "0.0.0.0/0"
           }
         ],
@@ -104,13 +108,13 @@
           {
             "Key": "Environment",
             "Value": {
-              "Ref": "Environment"
+              "Ref": "EnvironmentTag"
             }
           },
           {
             "Key": "Name",
             "Value": {
-              "Fn::Sub": "${Environment}.SG.jenkins"
+              "Fn::Sub": "${EnvironmentTag}.SG.jenkins"
             }
           }
         ]
@@ -188,11 +192,17 @@
               "b_extract_node": {
                 "command": "tar xf node-v6.11.1-linux-x64.tar.xz  --strip=1 -C /usr/local"
               },
-              "c_authbind_touch": {
+              "c_authbind_touch_a": {
                 "command": "touch /etc/authbind/byport/80"
               },
-              "d_authbind_chmod": {
+              "c_authbind_touch_b": {
+                "command": "touch /etc/authbind/byport/443"
+              },
+              "d_authbind_chmod_a": {
                 "command": "chmod 500 /etc/authbind/byport/80"
+              },
+              "d_authbind_chmod_b": {
+                "command": "chmod 500 /etc/authbind/byport/443"
               },
               "e_install_pip": {
                 "command": "pip install --upgrade pip"
@@ -201,7 +211,7 @@
                 "command": "pip install --upgrade awscli"
               },
               "g_uninstall_aws_cli": {
-                "command": "apt-get remove --purge apache2"
+                "command": "apt-get remove -y --purge apache2"
               }
             }
           },
@@ -248,8 +258,11 @@
               "c_usermod_ubuntu": {
                 "command": "usermod -aG docker,jenkins,ubuntu ubuntu"
               },
-              "d_authbind_chown": {
+              "d_authbind_chown_a": {
                 "command": "chown jenkins /etc/authbind/byport/80"
+              },
+              "d_authbind_chown_b": {
+                "command": "chown jenkins /etc/authbind/byport/443"
               },
               "e_make_jenkins_home": {
                 "command": "mkdir /home/jenkins"
@@ -261,7 +274,7 @@
                 "command": "cp /home/ubuntu/.bashrc /home/jenkins/.bashrc"
               },
               "j_update_conf": {
-                "command": "sed -i.bak 's/HTTP_PORT=8080/HTTP_PORT=80/g' /etc/default/jenkins"
+                "command": "sed -i.bak 's:JENKINS_ARGS=.*:JENKINS_ARGS=\"--webroot=/var/cache/$NAME/war --httpPort=-1 --httpsPort=8443\":' /etc/default/jenkins "
               },
               "k_authbind": {
                 "command": "sed -i.bak 's:\\$JAVA:authbind \\$JAVA:' /etc/init.d/jenkins"
@@ -378,19 +391,7 @@
               }
             ],
             "SubnetId": {
-              "Fn::Select": [
-                "0",
-                {
-                  "Fn::Split": [
-                    "|",
-                    {
-                      "Fn::ImportValue": {
-                        "Fn::Sub": "${Environment}:Subnets:Public"
-                      }
-                    }
-                  ]
-                }
-              ]
+              "Ref": "SubnetId"
             }
           }
         ],
@@ -401,7 +402,7 @@
           {
             "Key": "Environment",
             "Value": {
-              "Ref": "Environment"
+              "Ref": "EnvironmentTag"
             }
           },
           {
@@ -451,6 +452,26 @@
         }
       }
     },
+    "ElasticIp": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "MasterServer"
+        }
+      }
+    },
+    "JenkinsVolumeAttachment": {
+      "Type": "AWS::EC2::VolumeAttachment",
+      "Properties": {
+        "Device": "/dev/xvdf",
+        "InstanceId": {
+          "Ref": "MasterServer"
+        },
+        "VolumeId": {
+          "Ref": "JenkinsHomeVolume"
+        }
+      }
+    },
     "MasterServerRecordSet": {
       "Type": "AWS::Route53::RecordSet",
       "Properties": {
@@ -462,7 +483,10 @@
           "Fn::Join": [
             "",
             [
-              "jenkins.",
+              {
+                "Ref": "AWS::StackName"
+              },
+              ".",
               {
                 "Ref": "HostedZone"
               }
@@ -473,10 +497,7 @@
         "TTL": "900",
         "ResourceRecords": [
           {
-            "Fn::GetAtt": [
-              "MasterServer",
-              "PublicIp"
-            ]
+            "Ref": "ElasticIp"
           }
         ]
       }

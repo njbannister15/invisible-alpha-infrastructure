@@ -83,21 +83,42 @@
     }
   },
   "Parameters": {
-    "Environment": {
+    "EnvironmentTag": {
       "Type": "String",
-      "Default": "DevOps",
+      "Default": "Production",
       "AllowedValues": [
-        "Prod",
-        "Stage",
+        "Production",
+        "Development",
+        "Demo",
         "Sandbox",
-        "Test",
+        "Testing",
         "DevOps"
       ],
-      "Description": "Enter the Name for the 7mb environment."
+      "Description": "Enter the Name for this environment, it is used in tagging various item of this stack"
     },
     "RancherKeyName": {
       "Type": "AWS::EC2::KeyPair::KeyName",
       "Description": "Enter the name of an existing key pair to use in this template."
+    },
+    "VPCId": {
+      "Type": "AWS::EC2::VPC::Id",
+      "Description": "The VPC To deploy into"
+    },
+    "PrivateHostedZone": {
+      "Type": "AWS::Route53::HostedZone::Id",
+      "Description": "The id of the private hosted zone for rancher"
+    },
+    "PrivateHostedZoneName": {
+      "Type": "String",
+      "Description": "The name of private hosted zone for rancher (see PrivateHostedZone.. the name is there (do not add the trailing \".\")"
+    },
+    "RancherHostSubnetID": {
+      "Type": "AWS::EC2::Subnet::Id",
+      "Description": "The subnet you want to put the rancher server in."
+    },
+    "RancherAvailabilityZone": {
+      "Type": "AWS::EC2::AvailabilityZone::Name",
+      "Description": "The availaibility zone for the ranche instance"
     },
     "RancherInstanceType": {
       "Type": "String",
@@ -112,25 +133,14 @@
       "Description": "Enter a size for the rancher instances in the VPC from t2.nano, t2.micro, t2.small, m3.medium, or m4.large. Default is t2.micro."
     },
     "RancherInstanceHostname": {
-      "Type": "String",
-      "Default": "rancher",
+      "Type": "String",      
       "Description": "Enter a hostname for the rancher instance created by this template."
     },
     "RancherInstancePort": {
       "Type": "String",
-      "Default": "80",
+      "Default": "8080",
       "Description": "Enter a port for the rancher instance created by this template."
-    },
-    "RancherDBInstanceType": {
-      "Type": "String",
-      "Default": "db.t2.small",
-      "AllowedValues": [
-        "db.t2.small",
-        "db.t2.medium",
-        "db.m4.large"
-      ],
-      "Description": "Enter a size for the rancher database instance in the VPC from t2.small, m3.medium, or m4.large. Default is t2.small."
-    },
+    },   
     "RancherDBHostname": {
       "Type": "String",
       "Default": "rancher-db",
@@ -164,99 +174,14 @@
       "MinLength": "4",
       "ConstraintDescription": "must contain atleast 4 characters.",
       "Description": "Enter a password for the database user created by this template."
-    },
-    "HostedZone": {
-      "Type": "String",
-      "Description": "HostedZone for rancher (include trailing . (dot))"
     }
   },
   "Resources": {
-    "RancherDBSubnetGroup": {
-      "Type": "AWS::RDS::DBSubnetGroup",
-      "Properties": {
-        "DBSubnetGroupDescription": "The Rancher DB subnet group.",
-        "SubnetIds": {
-          "Fn::Split": [
-            "|",
-            {
-              "Fn::ImportValue": {
-                "Fn::Sub": "${Environment}:Subnets:Public"
-              }
-            }
-          ]
-        },
-        "Tags": [
-          {
-            "Key": "7mb:Env",
-            "Value": {
-              "Ref": "Environment"
-            }
-          },
-          {
-            "Key": "Name",
-            "Value": {
-              "Fn::Sub": "${Environment}.RancherDB.SubnetGroup"
-            }
-          }
-        ]
-      }
-    },
-    "RancherDB": {
-      "Type": "AWS::RDS::DBInstance",
-      "Properties": {
-        "AllocatedStorage": "20",
-        "CopyTagsToSnapshot": "true",
-        "DBInstanceClass": {
-          "Ref": "RancherDBInstanceType"
-        },
-        "DBName": {
-          "Ref": "RancherDBName"
-        },
-        "DBSubnetGroupName": {
-          "Ref": "RancherDBSubnetGroup"
-        },
-        "Engine": "mysql",
-        "EngineVersion": "5.7.11",
-        "LicenseModel": "general-public-license",
-        "MasterUsername": {
-          "Ref": "RancherDBUser"
-        },
-        "MasterUserPassword": {
-          "Ref": "RancherDBPassword"
-        },
-        "MultiAZ": "true",
-        "Port": {
-          "Ref": "RancherDBPort"
-        },
-        "PubliclyAccessible": "false",
-        "Tags": [
-          {
-            "Key": "7mb:Env",
-            "Value": {
-              "Ref": "Environment"
-            }
-          },
-          {
-            "Key": "Name",
-            "Value": {
-              "Fn::Sub": "${Environment}.RancherDB"
-            }
-          }
-        ],
-        "VPCSecurityGroups": [
-          {
-            "Ref": "RancherDBSecurityGroup"
-          }
-        ]
-      }
-    },
     "RancherInstance": {
       "Type": "AWS::EC2::Instance",
       "Properties": {
         "AvailabilityZone": {
-          "Fn::ImportValue": {
-            "Fn::Sub": "${Environment}:Zones:Default"
-          }
+          "Ref": "RancherAvailabilityZone"
         },
         "ImageId": {
           "Fn::FindInMap": [
@@ -285,15 +210,15 @@
         "SourceDestCheck": "false",
         "Tags": [
           {
-            "Key": "7mb:Env",
+            "Key": "Environment",
             "Value": {
-              "Ref": "Environment"
+              "Ref": "EnvironmentTag"
             }
           },
           {
             "Key": "Name",
             "Value": {
-              "Fn::Sub": "${Environment}.Rancher"
+              "Fn::Sub": "${EnvironmentTag}.${RancherDBHostname}"
             }
           }
         ],
@@ -309,19 +234,7 @@
               }
             ],
             "SubnetId": {
-              "Fn::Select": [
-                "0",
-                {
-                  "Fn::Split": [
-                    "|",
-                    {
-                      "Fn::ImportValue": {
-                        "Fn::Sub": "${Environment}:Subnets:Public"
-                      }
-                    }
-                  ]
-                }
-              ]
+              "Ref": "RancherHostSubnetID"
             }
           }
         ],
@@ -343,17 +256,17 @@
                 "add-apt-repository \"deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable\"\n",
                 "apt-get -y update\n",
                 "apt-get -y install docker-ce\n",
+                "wget http://s3.amazonaws.com/ec2metadata/ec2-metadata\n",
+                "chmod u+x ec2-metadata\n",
                 {
-                  "Fn::Sub": "docker run -d --restart=unless-stopped --name rancher -p ${RancherInstancePort}:8080 rancher/server"
+                  "Fn::Sub": "docker run -d --restart=unless-stopped -p 9345:9345  -p ${RancherInstancePort}:8080 rancher/server"
                 },
                 {
                   "Fn::Sub": " --db-host ${RancherDBHostname}"
                 },
                 ".",
                 {
-                  "Fn::ImportValue": {
-                    "Fn::Sub": "${Environment}:PrivateHostedZone:Name"
-                  }
+                  "Ref": "PrivateHostedZoneName"
                 },
                 {
                   "Fn::Sub": " --db-port ${RancherDBPort}"
@@ -367,6 +280,7 @@
                 {
                   "Fn::Sub": " --db-name ${RancherDBName}"
                 },
+                " --advertise-address `./ec2-metadata --local-ipv4 | cut -d ' ' -f 2`",                
                 "\n"
               ]
             ]
@@ -374,71 +288,12 @@
         }
       }
     },
-    "RancherDBSecurityGroup": {
-      "Type": "AWS::EC2::SecurityGroup",
-      "Properties": {
-        "GroupDescription": "Security group for the Rancher DB layer.",
-        "VpcId": {
-          "Fn::ImportValue": {
-            "Fn::Sub": "${Environment}:VPC"
-          }
-        },
-        "SecurityGroupIngress": [
-          {
-            "IpProtocol": "icmp",
-            "FromPort": "-1",
-            "ToPort": "-1",
-            "CidrIp": "0.0.0.0/0"
-          },
-          {
-            "IpProtocol": "tcp",
-            "FromPort": "22",
-            "ToPort": "22",
-            "CidrIp": "0.0.0.0/0"
-          },
-          {
-            "IpProtocol": "tcp",
-            "FromPort": {
-              "Ref": "RancherDBPort"
-            },
-            "ToPort": {
-              "Ref": "RancherDBPort"
-            },
-            "SourceSecurityGroupId": {
-              "Ref": "RancherInstanceSecurityGroup"
-            }
-          }
-        ],
-        "SecurityGroupEgress": [
-          {
-            "IpProtocol": "-1",
-            "CidrIp": "0.0.0.0/0"
-          }
-        ],
-        "Tags": [
-          {
-            "Key": "7mb:Env",
-            "Value": {
-              "Ref": "Environment"
-            }
-          },
-          {
-            "Key": "Name",
-            "Value": {
-              "Fn::Sub": "${Environment}.SG.RancherDB"
-            }
-          }
-        ]
-      }
-    },
     "RancherInstanceSecurityGroup": {
       "Type": "AWS::EC2::SecurityGroup",
       "Properties": {
         "GroupDescription": "Security group for the Rancher Instance layer.",
         "VpcId": {
-          "Fn::ImportValue": {
-            "Fn::Sub": "${Environment}:VPC"
-          }
+          "Ref": "VPCId"
         },
         "SecurityGroupIngress": [
           {
@@ -470,52 +325,14 @@
           {
             "Key": "7mb:Env",
             "Value": {
-              "Ref": "Environment"
+              "Ref": "EnvironmentTag"
             }
           },
           {
             "Key": "Name",
             "Value": {
-              "Fn::Sub": "${Environment}.SG.Rancher"
+              "Fn::Sub": "${EnvironmentTag}.SG.Rancher"
             }
-          }
-        ]
-      }
-    },
-    "RancherDBRecordSet": {
-      "Type": "AWS::Route53::RecordSet",
-      "Properties": {
-        "HostedZoneId": {
-          "Fn::ImportValue": {
-            "Fn::Sub": "${Environment}:PrivateHostedZone"
-          }
-        },
-        "Comment": "The private DNS record for the rancher database.",
-        "Name": {
-          "Fn::Join": [
-            "",
-            [
-              {
-                "Ref": "RancherDBHostname"
-              },
-              ".",
-              {
-                "Fn::ImportValue": {
-                  "Fn::Sub": "${Environment}:PrivateHostedZone:Name"
-                }
-              },
-              "."
-            ]
-          ]
-        },
-        "Type": "CNAME",
-        "TTL": "900",
-        "ResourceRecords": [
-          {
-            "Fn::GetAtt": [
-              "RancherDB",
-              "Endpoint.Address"
-            ]
           }
         ]
       }
@@ -524,9 +341,7 @@
       "Type": "AWS::Route53::RecordSet",
       "Properties": {
         "HostedZoneId": {
-          "Fn::ImportValue": {
-            "Fn::Sub": "${Environment}:PrivateHostedZone"
-          }
+          "Ref": "PrivateHostedZone"
         },
         "Comment": "The private DNS record for the rancher instance.",
         "Name": {
@@ -538,9 +353,7 @@
               },
               ".",
               {
-                "Fn::ImportValue": {
-                  "Fn::Sub": "${Environment}:PrivateHostedZone:Name"
-                }
+                "Ref": "PrivateHostedZoneName"
               },
               "."
             ]

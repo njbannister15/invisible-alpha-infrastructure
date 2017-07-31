@@ -1,0 +1,571 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Sets up a multi dual AZ VPC with public subnets only",
+  "Mappings": {
+    "EnvSettings": {
+      "Prod": {
+        "HostedZone": "prod",
+        "Base": "10.1",
+        "VPC": "10.1.0.0/16",
+        "Zone1Public": "10.1.0.0/24",
+        "Zone2Public": "10.1.1.0/24"
+      },
+      "Demo": {
+        "HostedZone": "demo",
+        "Base": "10.2",
+        "VPC": "10.2.0.0/16",
+        "Zone1Public": "10.2.0.0/24",
+        "Zone2Public": "10.2.1.0/24"
+      },
+      "Sandbox": {
+        "HostedZone": "sandbox",
+        "Base": "10.3",
+        "VPC": "10.3.0.0/16",
+        "Zone1Public": "10.3.0.0/24",
+        "Zone2Public": "10.3.1.0/24"
+      },
+      "Test": {
+        "HostedZone": "test",
+        "Base": "10.4",
+        "VPC": "10.4.0.0/16",
+        "Zone1Public": "10.4.0.0/24",
+        "Zone2Public": "10.4.1.0/24"
+      },
+      "DevOps": {
+        "HostedZone": "devops",
+        "Base": "10.5",
+        "VPC": "10.5.0.0/16",
+        "Zone1Public": "10.5.0.0/24",
+        "Zone2Public": "10.5.1.0/24"
+      }
+    }
+  },
+  "Parameters": {
+    "Environment": {
+      "Type": "String",
+      "Default": "Production",
+      "MinLength": "3",
+      "MaxLength": "12",
+      "AllowedPattern": "^[a-zA-Z]+$",
+      "Description": "Enter the Name for the environment, this is used in tagging"
+    },
+    "PrivateHostedZoneName": {
+      "Type": "String",
+      "Description": "The name for a newly created private hosted zone assocaites with this VPC"
+    },
+    "BaseCidr": {
+      "Type": "String",
+      "Description": "The first two CIDR sections used for the environment."
+    },
+    "VPCCidr": {
+      "Type": "String",
+      "Default": "10.1.0.0/16",
+      "Description": "The CIDR used for the VPC in the environment."
+    },
+    "Zone1Public": {
+      "Type": "String",
+      "Default": "10.1.0.0/24",
+      "Description": "The CIDR used for the zone 1 in the environment."
+    },
+    "Zone2Public": {
+      "Type": "String",
+      "Default": "10.1.1.0/24",
+      "Description": "The CIDR used for the zone 2 in the environment."
+    }
+  },
+  "Resources": {
+    "VPCMultiAZ": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": {
+          "Ref": "VPCCidr"
+        },
+        "EnableDnsSupport": true,
+        "EnableDnsHostnames": true,
+        "InstanceTenancy": "default",
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${Environment}.VPC"
+            }
+          }
+        ]
+      }
+    },
+    "Zone1PublicSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "0",
+            {
+              "Fn::GetAZs": {
+                "Ref": "AWS::Region"
+              }
+            }
+          ]
+        },
+        "CidrBlock": {
+          "Ref": "Zone1Public"
+        },
+        "MapPublicIpOnLaunch": false,
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${Environment}.Zone1.Public"
+            }
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPCMultiAZ"
+        }
+      }
+    },
+    "Zone2PublicSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "1",
+            {
+              "Fn::GetAZs": {
+                "Ref": "AWS::Region"
+              }
+            }
+          ]
+        },
+        "CidrBlock": {
+          "Ref": "Zone2Public"
+        },
+        "MapPublicIpOnLaunch": false,
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${Environment}.Zone2.Public"
+            }
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPCMultiAZ"
+        }
+      }
+    },
+    "PublicRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPCMultiAZ"
+        },
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${Environment}.Public.RouteTable"
+            }
+          }
+        ]
+      },
+      "Metadata": {}
+    },
+    "PublicTrafficForPublicRouteTable": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "Zone1PublicSubnetPublicRouteAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        },
+        "SubnetId": {
+          "Ref": "Zone1PublicSubnet"
+        }
+      }
+    },
+    "Zone2PublicSubnetPublicRouteAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        },
+        "SubnetId": {
+          "Ref": "Zone2PublicSubnet"
+        }
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${Environment}.InternetGateway"
+            }
+          }
+        ]
+      }
+    },
+    "VPCInternetGatewayAttachment": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        },
+        "VpcId": {
+          "Ref": "VPCMultiAZ"
+        }
+      }
+    },
+    "VPCPrivateHostedZone": {
+      "Type": "AWS::Route53::HostedZone",
+      "Properties": {
+        "HostedZoneConfig": {
+          "Comment": {
+            "Fn::Sub": "The private hosted zone for the ${Environment} environment."
+          }
+        },
+        "Name": {
+          "Ref": "PrivateHostedZoneName"
+        },
+        "VPCs": [
+          {
+            "VPCId": {
+              "Ref": "VPCMultiAZ"
+            },
+            "VPCRegion": {
+              "Ref": "AWS::Region"
+            }
+          }
+        ],
+        "HostedZoneTags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${Environment}.PrivateHostedZone"
+            }
+          }
+        ]
+      }
+    },
+    "WebServerSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupName": "WebServerSG",
+        "GroupDescription": "Web server security group",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "80",
+            "ToPort": "80",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "8080",
+            "ToPort": "8080",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "443",
+            "ToPort": "443",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "8443",
+            "ToPort": "8443",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${Environment}.WebServerSG"
+            }
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPCMultiAZ"
+        }
+      }
+    },
+    "SSHSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupName": "SSHSG",
+        "GroupDescription": "SSH security group",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "22",
+            "ToPort": "22",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "Environment"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${Environment}.SSHSG"
+            }
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPCMultiAZ"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "EnvVPCId": {
+      "Description": "The VPC ID associated with the environment.",
+      "Value": {
+        "Ref": "VPCMultiAZ"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${Environment}:VPC"
+        }
+      }
+    },
+    "EnvVPCType": {
+      "Description": "Whether or not the VPC is setup as single availability zone or multiple.",
+      "Value": "MultiAZ",
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${Environment}:VPC:Type"
+        }
+      }
+    },
+    "EnvRegion": {
+      "Description": "The AWS Region used with the environment.",
+      "Value": {
+        "Ref": "AWS::Region"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${Environment}:Region"
+        }
+      }
+    },
+    "EnvVPCZones": {
+      "Description": "The Availability Zones used for the environment.",
+      "Value": {
+        "Fn::Join": [
+          "|",
+          [
+            {
+              "Fn::Select": [
+                "0",
+                {
+                  "Fn::GetAZs": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              ]
+            },
+            {
+              "Fn::Select": [
+                "1",
+                {
+                  "Fn::GetAZs": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              ]
+            }
+          ]
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${Environment}:Zones"
+        }
+      }
+    },
+    "EnvVPCDefaultZone": {
+      "Description": "The default Availability Zone used for the environment.",
+      "Value": {
+        "Fn::Select": [
+          "0",
+          {
+            "Fn::GetAZs": {
+              "Ref": "AWS::Region"
+            }
+          }
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${Environment}:Zones:Default"
+        }
+      }
+    },
+    "EnvVPCSubnets": {
+      "Description": "The subnets created for the environment.",
+      "Value": {
+        "Fn::Join": [
+          "|",
+          [
+            {
+              "Ref": "Zone1PublicSubnet"
+            },
+            {
+              "Ref": "Zone2PublicSubnet"
+            }
+          ]
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${Environment}:Subnets"
+        }
+      }
+    },
+    "EnvVPCPublicSubnets": {
+      "Description": "The public subnets created for the environment.",
+      "Value": {
+        "Fn::Join": [
+          "|",
+          [
+            {
+              "Ref": "Zone1PublicSubnet"
+            },
+            {
+              "Ref": "Zone2PublicSubnet"
+            }
+          ]
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${Environment}:Subnets:Public"
+        }
+      }
+    },
+    "EnvVPCRouteTables": {
+      "Description": "The route tables created for the environment.",
+      "Value": {
+        "Fn::Join": [
+          "|",
+          [
+            {
+              "Ref": "PublicRouteTable"
+            }
+          ]
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${Environment}:RouteTables"
+        }
+      }
+    },
+    "EnvVPCCidr": {
+      "Description": "The CIDR used for the VPC in the environment.",
+      "Value": {
+        "Ref": "VPCCidr"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${Environment}:VPC:Cidr"
+        }
+      }
+    },
+    "EnvVPCBaseCidr": {
+      "Description": "The first two CIDR sections used for the environment.",
+      "Value": {
+        "Ref": "BaseCidr"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${Environment}:VPC:BaseCidr"
+        }
+      }
+    },
+    "EnvPrivateHostedZoneId": {
+      "Description": "The id of the private hosted zone used for the environment.",
+      "Value": {
+        "Ref": "VPCPrivateHostedZone"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${Environment}:PrivateHostedZone"
+        }
+      }
+    },
+    "EnvPrivateHostedZoneName": {
+      "Description": "The name of the private hosted zone used for the environment.",
+      "Value": {
+        "Ref": "PrivateHostedZoneName"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${Environment}:PrivateHostedZone:Name"
+        }
+      }
+    }
+  }
+}
