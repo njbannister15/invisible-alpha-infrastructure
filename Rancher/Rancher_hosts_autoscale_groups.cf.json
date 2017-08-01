@@ -89,23 +89,23 @@
       "MinLength": "3",
       "MaxLength": "12",
       "AllowedPattern": "^[a-zA-Z]+$",
-      "Description": "Enter the Name for the environment, this is used in tagging"
+      "Description": "Enter the Name for the environment, this is used in tagging instances"
     },
     "Info": {
       "Type": "String",
-      "Default": "Production",
+      "Default": "Foo Bar Baz",
       "MinLength": "3",
       "MaxLength": "12",
       "AllowedPattern": "^[a-zA-Z]+$",
-      "Description": "informational label for cattle host"
+      "Description": "Informational label for cattle hosts."
     },
     "VPCId": {
       "Type": "AWS::EC2::VPC::Id",
-      "Description": "The VPC To deploy into"
+      "Description": "The VPC To deploy this cluster into"
     },
     "Subnets": {
       "Type": "List<AWS::EC2::Subnet::Id>",
-      "Description": "The List of subnets "
+      "Description": "The List of subnets for the autoscaling group"
     },
     "ServerInstanceType": {
       "Type": "String",
@@ -117,7 +117,7 @@
         "m4.large",
         "m4.xlarge"
       ],
-      "Description": "Enter the Name for the 7mb environment."
+      "Description": "Enter intance type"
     },
     "RancherRegistrationScriptUrl": {
       "Type": "String",
@@ -125,7 +125,7 @@
     },
     "LoginKeyName": {
       "Type": "AWS::EC2::KeyPair::KeyName",
-      "Description": "Enter the name of an existing key pair to use in this template."
+      "Description": "Enter the name of an existing key pair to use in this template for logging into instances"
     }
   },
   "Resources": {
@@ -177,6 +177,12 @@
             "IpProtocol": "tcp",
             "FromPort": "9345",
             "ToPort": "9345",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "3000",
+            "ToPort": "5000",
             "CidrIp": "0.0.0.0/0"
           }
         ],
@@ -360,7 +366,7 @@
             "commands": {
               "a_register_instance": {
                 "command": {
-                  "Fn::Sub": "docker run -e CATTLE_HOST_LABELS='info=${Info}' -d --privileged -v /var/run/docker.sock:/var/run/docker.sock -v /var/lib/rancher:/var/lib/rancher rancher/agent:v1.2.5 ${RancherRegistrationScriptUrl}"
+                  "Fn::Sub": "docker run -e CATTLE_HOST_LABELS=\"info=${Info}&aws.instance_id=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)&aws.availability_zone=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)\" -d --privileged -v /var/run/docker.sock:/var/run/docker.sock -v /var/lib/rancher:/var/lib/rancher rancher/agent:v1.2.5 ${RancherRegistrationScriptUrl}"
                 }
               }
             }
