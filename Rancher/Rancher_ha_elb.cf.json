@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Sets up a Rancher RDS mysql db inside a VPC.",
+  "Description": "Sets up an http elb for rancher masters to provide High Availibility",
   "Parameters": {
     "Instances": {
       "Type": "List<AWS::EC2::Instance::Id>",
