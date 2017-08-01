@@ -6,15 +6,10 @@
     "EnvironmentTag": {
       "Type": "String",
       "Default": "Production",
-      "AllowedValues": [
-        "Production",
-        "Development",
-        "Demo",
-        "Sandbox",
-        "Testing",
-        "DevOps"
-      ],
-      "Description": "Enter the Name for this environment, it is used in tags... etc"
+      "MinLength": "3",
+      "MaxLength": "12",
+      "AllowedPattern": "^[a-zA-Z]+$",
+      "Description": "Enter the Name for the environment, this is used in tagging"
     },
     "VPCId": {
       "Type": "AWS::EC2::VPC::Id",
@@ -30,7 +25,7 @@
     },
     "ServerInstanceType": {
       "Type": "String",
-      "Default": "t2.micro",
+      "Default": "m4.large",
       "AllowedValues": [
         "t2.micro",
         "t2.medium",
@@ -44,10 +39,10 @@
       "Type": "AWS::EC2::KeyPair::KeyName",
       "Description": "Enter the name of an existing key pair to use in this template."
     },
-    "HostedZone": {
+    "HostedZoneName": {
       "Type": "String",
       "Default": "dashboardalpha.com.",
-      "Description": "HostedZone for jenkins (include trailing . (dot))"
+      "Description": "HostedZoneName for jenkins (exclude trailing . (dot))"
     }
   },
   "Mappings": {},
@@ -476,7 +471,15 @@
       "Type": "AWS::Route53::RecordSet",
       "Properties": {
         "HostedZoneName": {
-          "Ref": "HostedZone"
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "HostedZoneName"
+              },
+              "."
+            ]
+          ]
         },
         "Comment": "DNS name for my instance.",
         "Name": {
@@ -488,8 +491,9 @@
               },
               ".",
               {
-                "Ref": "HostedZone"
-              }
+                "Ref": "HostedZoneName"
+              },
+              "."
             ]
           ]
         },
@@ -504,7 +508,7 @@
     }
   },
   "Outputs": {
-    "MasterNodeIP": {
+    "MasterDNS": {
       "Description": "The public DNS of the master node",
       "Value": {
         "Fn::GetAtt": [
@@ -514,6 +518,15 @@
       },
       "Export": {
         "Name": "JenkinsMasterDNS"
+      }
+    },
+    "MasterNodeURL": {
+      "Description": "The public DNS of the master node",
+      "Value": {
+        "Fn::Sub": "https://${AWS::StackName}.${HostedZoneName}:8443"
+      },
+      "Export": {
+        "Name": "JenkinsMasterNodeURL"
       }
     }
   }
